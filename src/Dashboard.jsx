@@ -1,364 +1,393 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import DataTable from "react-data-table-component";
+import Swal from "sweetalert2";
+import { MdDeleteOutline } from "react-icons/md";
+import { FaEdit } from "react-icons/fa";
+import { IoSearch } from "react-icons/io5";
 
 function Dashboard() {
   const [students, setStudents] = useState([]);
-  const [form, setForm] = useState({
-    FirstName: '',
-    LastName: '',
-    Age: '',
-    Address: '',
-    gender: '',
-    PhoneNumber: '',
-    MediumOfInstruction: '',
-    Interest: '',
-    DisabledPerson: false
+  const [filtered, setFiltered] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [newStudent, setNewStudent] = useState({
+    FirstName: "",
+    LastName: "",
+    Age: "",
+    Address: "",
+    PhoneNumber: "",
+    gender: "",
+    MeduimOfInstructions: "",
+    Intrest: "",
+    DisabledPerson: false,
   });
-  const [editId, setEditId] = useState(null);
+  const [editStudent, setEditStudent] = useState(null);
+  const [errors, setErrors] = useState({});
   const navigate = useNavigate();
 
+  const API_URL = "https://68d0e236e6c0cbeb39a2bb5f.mockapi.io/api/insert";
+
+                                              // STYLE FOR TABLE
+  const customStyles = {
+    headCells: {
+      style: {
+        paddingLeft: "16px",
+        paddingRight: "0px",
+        fontSize: "14px",
+      },
+    },
+    cells: {
+      style: {
+        paddingLeft: "16px",
+        paddingRight: "0px",
+        fontSize: "14px",
+      },
+    },
+  };
+
+                                          // TABLE
+  const columns = [
+    { name: "ID", selector: (row) => row.id, sortable: true, width: "60px" },
+    { name: "First Name", selector: (row) => row.FirstName, sortable: true },
+    { name: "Last Name", selector: (row) => row.LastName, sortable: true },
+    { name: "Age", selector: (row) => row.Age, sortable: true, width: "80px" },
+    { name: "Address", selector: (row) => row.Address, sortable: true, wrap: true },
+    { name: "Phone", selector: (row) => row.PhoneNumber, sortable: true, },
+    { name: "Gender", selector: (row) => row.gender, sortable: true, width: "90px" },
+    { name: "Medium", selector: (row) => row.MeduimOfInstructions, sortable: true },
+    { name: "Interest", selector: (row) => row.Intrest, sortable: true },
+    {
+      name: "Disabled",
+      selector: (row) => (row.DisabledPerson ? "Yes" : "No"),
+      sortable: true,
+      width: "100px",
+    },
+    {
+      name: "Created Date",
+      selector: (row) => new Date(row.createdAt).toLocaleDateString(),
+      sortable: true,
+      width: "120px",
+    },
+    {
+      name: "Actions",
+      cell: (row) => (
+        <div className="flex gap-1">
+          <button
+            onClick={() => handleEdit(row)}
+            className="bg-blue-500 text-white px-1 py-1 rounded hover:bg-blue-500"
+          >
+            <FaEdit className="text-2xl" />
+          </button>
+          <button
+            onClick={() => handleDelete(row.id)}
+            className="bg-red-500 text-white px-1 py-1 rounded hover:bg-red-600"
+          >
+            <MdDeleteOutline  className="text-2xl"/>
+          </button>
+        </div>
+      ),
+    },
+  ];
+
+                                                  // FETCH
+  const fetchStudents = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(API_URL);
+      const data = await res.json();
+      setStudents(data);
+      setFiltered(data);
+    } catch (err) {
+      alert("Failed to fetch data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    if (!localStorage.getItem('loggedIn')) navigate('/');
-    else {
-      fetch('https://68d0e236e6c0cbeb39a2bb5f.mockapi.io/api/insert')
-        .then(res => res.json())
-        .then(data => setStudents(data))
-        .catch(error => console.log('Fetch error:', error));
+    if (!localStorage.getItem("isLoggedIn")) {
+      navigate("/login");
+      return;
     }
-  }, [navigate]);
+    fetchStudents();
+  }, []);
 
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setForm({ ...form, [name]: type === 'checkbox' ? checked : value });
-  };
-
-  const handleSave = (e) => {
+                                                            // ADD
+  const handleAdd = async (e) => {
     e.preventDefault();
+    if (!validate(newStudent)) return;
 
-    if (!form.FirstName || !form.LastName || form.Age <= 0) {
-      return alert("Please fill all required fields correctly!");
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...newStudent, Age: Number(newStudent.Age), createdAt: new Date().toISOString() }),
+      });
+      await res.json();
+      fetchStudents();
+      setShowAddModal(false);
+      resetForm();
+    } catch (err) {
+      alert("Failed to add student");
     }
-
-    const interestArray = form.Interest
-      ? form.Interest.split(",").map(item => item.trim()).filter(Boolean)
-      : [];
-
-    const apiUrl = editId
-      ? `https://68d0e236e6c0cbeb39a2bb5f.mockapi.io/api/insert/${editId}`
-      : "https://68d0e236e6c0cbeb39a2bb5f.mockapi.io/api/insert";
-
-    fetch(apiUrl, {
-      method: editId ? "PUT" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, Interest: interestArray })
-    })
-      .then((response) => response.json())
-      .then(() => {
-        fetch("https://68d0e236e6c0cbeb39a2bb5f.mockapi.io/api/insert")
-          .then((res) => res.json())
-          .then((data) => setStudents(data));
-
-        setForm({
-          FirstName: "",
-          LastName: "",
-          Age: "",
-          Address: "",
-          gender: "",
-          PhoneNumber: "",
-          MediumOfInstruction: "",
-          Interest: "",
-          DisabledPerson: false
-        });
-        setEditId(null);
-      })
-      .catch((error) => console.log("Save error:", error));
   };
 
+                                                          // EDIT
   const handleEdit = (student) => {
-    setForm({
-      FirstName: student.FirstName,
-      LastName: student.LastName,
-      Age: student.Age,
-      Address: student.Address,
-      gender: student.gender,
-      PhoneNumber: student.PhoneNumber,
-      MediumOfInstruction: student.MediumOfInstruction,
-      Interest: student.Interest.join(', '),
-      DisabledPerson: student.DisabledPerson
-    });
-    setEditId(student.id);
+    setEditStudent(student);
+    setShowEditModal(true);
   };
 
-  const handleDelete = (id) => {
-    if (window.confirm('Are you sure you want to delete this student?')) {
-      fetch(`https://68d0e236e6c0cbeb39a2bb5f.mockapi.io/api/insert/${id}`, { method: 'DELETE' })
-        .then(() => {
-          fetch('https://68d0e236e6c0cbeb39a2bb5f.mockapi.io/api/insert')
-            .then(res => res.json())
-            .then(data => setStudents(data));
-        })
-        .catch(error => console.log('Delete error:', error));
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    if (!validate(editStudent)) return;
+
+    try {
+      const res = await fetch(`${API_URL}/${editStudent.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...editStudent, Age: Number(editStudent.Age) }),
+      });
+      await res.json();
+      fetchStudents();
+      setShowEditModal(false);
+    } catch (err) {
+      alert("Failed to update student");
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('loggedIn');
-    navigate('/');
+                                                    // DELETE
+  const handleDelete = async (id) => {
+    const result = await Swal.fire({
+      title: "Are you sure?",
+      text: "This student will be deleted!",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "red",
+      cancelButtonColor: "grey",
+      confirmButtonText: "Delete",
+    });
+
+    if (result.isConfirmed) {
+      try {
+        await fetch(`${API_URL}/${id}`, { method: "DELETE" });
+        fetchStudents();
+        Swal.fire("Deleted!", "Student has been deleted.", "success");
+      } catch {
+        Swal.fire("Error!", "Failed to delete student.", "error");
+      }
+    }
   };
+
+                                                  //  SEARCH
+const handleSearch = (e) => {
+  const value = e.target.value.toLowerCase();
+  setFiltered(
+    students.filter(
+      (s) =>
+        s.FirstName?.toLowerCase().includes(value) ||
+        s.LastName?.toLowerCase().includes(value)
+    )
+  );
+};
+
+
+                                                  // VALIDATAION
+  const validate = (student) => {
+    const errs = {};
+    if (!student.FirstName) errs.FirstName = "Required";
+    if (!student.LastName) errs.LastName = "Required";
+    if (!student.Age) errs.Age = "Required";
+    if (!student.Address) errs.Address = "Required";
+    if (!student.PhoneNumber) errs.PhoneNumber = "Required";
+    if (!student.gender) errs.gender = "Required";
+    if (!student.MeduimOfInstructions) errs.MeduimOfInstructions = "Required";
+    if (!student.Intrest) errs.Intrest = "Required";
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const resetForm = () => {
+    setNewStudent({
+      FirstName: "",
+      LastName: "",
+      Age: "",
+      Address: "",
+      PhoneNumber: "",
+      gender: "",
+      MeduimOfInstructions: "",
+      Intrest: "",
+      DisabledPerson: false,
+    });
+    setErrors({});
+  };
+
+  if (loading) return <div className="p-6 text-center">Loading...</div>;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 md:p-6">
-      <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-gray-800">Student Dashboard</h1>
-          </div>
-          <button 
-            onClick={handleLogout} 
-            className="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-lg font-semibold transition duration-200 shadow-md hover:shadow-lg"
+    <div className="container m-auto p-6">
+                                                       {/* HEADER */}
+      <div className="w-full flex justify-between mb-6 shadow-xl p-4 rounded bg-white items-center lg:flex-row flex-col gap-4">
+        <h1 className="text-2xl font-bold ">Student Management Dashboard</h1>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="bg-green-500 text-white px-4 py-2 rounded"
+          >
+            + Add Student
+          </button>
+          <button
+            onClick={() => {
+              localStorage.removeItem("isLoggedIn");
+              navigate("/login");
+            }}
+            className="bg-gray-500 text-white px-4 py-2 rounded"
           >
             Logout
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Form Section */}
-        <div className="bg-white rounded-xl shadow-lg p-6">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6">
-            {editId ? 'Edit Student' : 'Add New Student'}
-          </h2>
-          
-          <form onSubmit={handleSave} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
-                <input 
-                  name="FirstName" 
-                  value={form.FirstName} 
-                  onChange={handleChange} 
-                  placeholder="John" 
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
-                <input 
-                  name="LastName" 
-                  value={form.LastName} 
-                  onChange={handleChange} 
-                  placeholder="Doe" 
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                  required
-                />
-              </div>
-            </div>
+                                                     {/* SEARCH */}
+      <div className="border flex gap-2 items-center  p-2 pl-3 rounded mb-4 border-gray-400 w-1/3">
+      <IoSearch className="text-blue-600 text-2xl"/>
+        <input
+        type="text"
+        placeholder="Search by Name . . . "
+        onChange={handleSearch}
+        className="w-full focus:outline-none text-sm"
+      />
+      </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Age *</label>
-                <input 
-                  name="Age" 
-                  type="number" 
-                  value={form.Age} 
-                  onChange={handleChange} 
-                  placeholder="18" 
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                  min="1"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
-                <select 
-                  name="gender" 
-                  value={form.gender} 
-                  onChange={handleChange} 
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                >
-                  <option value="">Select Gender</option>
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-            </div>
+                                                 {/* TABLE OF CONTENT */}
+      <DataTable
+        columns={columns}
+        data={filtered}
+        pagination
+        highlightOnHover
+        striped
+        noDataComponent="No records found"
+        customStyles={customStyles}
+      />
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-              <input 
-                name="Address" 
-                value={form.Address} 
-                onChange={handleChange} 
-                placeholder="123 Main Street, City" 
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-              />
-            </div>
+                                          {/* ADD MODEL */}
+      {showAddModal && (
+        <Modal
+          title="Add Student"
+          student={newStudent}
+          setStudent={setNewStudent}
+          errors={errors}
+          onClose={() => {
+            setShowAddModal(false);
+            resetForm();
+          }}
+          onSubmit={handleAdd}
+        />
+      )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
-                <input 
-                  name="PhoneNumber" 
-                  value={form.PhoneNumber} 
-                  onChange={handleChange} 
-                  placeholder="+1234567890" 
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Medium of Instruction</label>
-                <input 
-                  name="MediumOfInstruction" 
-                  value={form.MediumOfInstruction} 
-                  onChange={handleChange} 
-                  placeholder="English" 
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                />
-              </div>
-            </div>
+                                            {/* EDIT MODEL */}
+      {showEditModal && (
+        <Modal
+          title="Edit Student"
+          student={editStudent}
+          setStudent={setEditStudent}
+          errors={errors}
+          onClose={() => setShowEditModal(false)}
+          onSubmit={handleUpdate}
+        />
+      )}
+    </div>
+  );
+}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Interests (comma-separated)</label>
-              <input 
-                name="Interest" 
-                value={form.Interest} 
-                onChange={handleChange} 
-                placeholder="Programming, Sports, Music" 
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-              />
-            </div>
-
-            <div className="flex items-center">
-              <input 
-                name="DisabledPerson" 
-                type="checkbox" 
-                checked={form.DisabledPerson} 
-                onChange={handleChange} 
-                className="h-5 w-5 text-blue-600 rounded focus:ring-blue-500"
-                id='disable'
-              />
-              <label className="ml-2 text-sm font-medium text-gray-700" htmlFor='disable'>Disabled Person</label>
-            </div>
-
-            <button 
-              type="submit" 
-              className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white py-3 px-6 rounded-lg font-semibold transition duration-200 shadow-md hover:shadow-lg"
-            >
-              {editId ? 'Update Student' : 'Add Student'}
-            </button>
-          </form>
+                                                  // REUSE
+function Modal({ title, student, setStudent, errors, onClose, onSubmit }) {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2">
+      <div className="bg-white p-6 rounded w-full max-w-md">
+        <div className="flex justify-between mb-4">
+          <h2 className="text-xl font-bold">{title}</h2>
+          <button onClick={onClose}>✕</button>
         </div>
+        <form onSubmit={onSubmit} className="space-y-3">
+          {["FirstName", "LastName", "Age", "Address", "PhoneNumber", "MeduimOfInstructions", "Intrest"].map(
+            (field) => {
+              let inputProps = {};
+              if (field === "FirstName" || field === "LastName") inputProps.maxLength = 20;
+              if (field === "Age") {
+                inputProps.type = "number";
+                inputProps.max = 99;
+              }
+              if (field === "PhoneNumber") inputProps.maxLength = 10;
 
-        {/* Student Records Section */}
-        <div className="bg-white rounded-xl shadow-lg p-6">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6">Student Records ({students.length})</h2>
-          
-          <div className="overflow-x-auto">
-            <div className="min-w-full">
-              <div className="bg-gray-50 rounded-lg overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Age</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Gender</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Phone</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden xl:table-cell">Address</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden 2xl:table-cell">Medium</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {students.map(student => (
-                      <tr key={student.id} className="hover:bg-gray-50 transition duration-150">
-                        <td className="px-4 py-4">
-                          <div className="flex items-center">
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">
-                                {student.FirstName} {student.LastName}
-                              </div>
-                              <div className="text-xs text-gray-500 sm:hidden">
-                                Age: {student.Age} • {student.gender}
-                                {student.PhoneNumber && ` • ${student.PhoneNumber}`}
-                              </div>
-                              <div className="text-xs text-gray-500 md:hidden mt-1">
-                                {student.Address && `Address: ${student.Address.substring(0, 20)}${student.Address.length > 20 ? '...' : ''}`}
-                              </div>
-                              <div className="text-xs text-gray-500 lg:hidden">
-                                {student.MediumOfInstruction && `Medium: ${student.MediumOfInstruction}`}
-                              </div>
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {student.Interest.slice(0, 2).map((interest, index) => (
-                                  <span key={index} className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                    {interest}
-                                  </span>
-                                ))}
-                                {student.Interest.length > 2 && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                    +{student.Interest.length - 2}
-                                  </span>
-                                )}
-                                {student.DisabledPerson && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                    Disabled
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 hidden sm:table-cell">
-                          {student.Age}
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
-                          {student.gender}
-                        </td>
-                        <td className="px-4 py-4 text-sm text-gray-500 hidden lg:table-cell">
-                          {student.PhoneNumber || '-'}
-                        </td>
-                        <td className="px-4 py-4 text-sm text-gray-500 hidden xl:table-cell">
-                          <div className="max-w-xs truncate" title={student.Address}>
-                            {student.Address || '-'}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 text-sm text-gray-500 hidden 2xl:table-cell">
-                          {student.MediumOfInstruction || '-'}
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="flex flex-col sm:flex-row sm:space-x-2 space-y-1 sm:space-y-0">
-                            <button 
-                              onClick={() => handleEdit(student)} 
-                              className="text-indigo-600 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-3 py-1 rounded-md transition duration-200 text-xs sm:text-sm"
-                            >
-                              Edit
-                            </button>
-                            <button 
-                              onClick={() => handleDelete(student.id)} 
-                              className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-md transition duration-200 text-xs sm:text-sm"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-          
-          {students.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              No student records found. Add your first student above.
-            </div>
+              return (
+                <div key={field}>
+                  <label className="block text-sm">{field}</label>
+                  <input
+                    {...inputProps}
+                    name={field}
+                    value={student?.[field] || ""}
+                    onChange={(e) => {
+                      let val = e.target.value;
+                      if (field === "Age" || field === "PhoneNumber") {
+                        val = val.replace(/\D/g, ""); // remove non-digit chars
+                        if (field === "Age" && val > 99) val = "99";
+                        if (field === "PhoneNumber" && val.length > 10) val = val.slice(0, 10);
+                      }
+                      setStudent((prev) => ({ ...prev, [field]: val }));
+                    }}
+                    className="w-full border p-2 rounded"
+                    placeholder={`Enter ${field}`}
+                  />
+                  {errors[field] && <p className="text-red-500 text-sm">{errors[field]}</p>}
+                </div>
+              );
+            }
           )}
-        </div>
+                                                {/* Gender */}
+          <div>
+            <label className="block text-sm">Gender</label>
+            <select
+              name="gender"
+              value={student?.gender || ""}
+              onChange={(e) => setStudent((prev) => ({ ...prev, gender: e.target.value }))}
+              className="w-full border p-2 rounded"
+            >
+              <option value="">Select</option>
+              <option>Male</option>
+              <option>Female</option>
+              <option>Other</option>
+            </select>
+            {errors.gender && <p className="text-red-500 text-sm">{errors.gender}</p>}
+          </div>
+
+                                                {/* Disabled */}
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              name="DisabledPerson"
+              checked={student?.DisabledPerson || false}
+              onChange={(e) =>
+                setStudent((prev) => ({ ...prev, DisabledPerson: e.target.checked }))
+              }
+              className="mr-2"
+            />
+            <label>Disabled Person</label>
+          </div>
+
+                                                            {/* Actions */}
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 border rounded">
+              Cancel
+            </button>
+            <button type="submit" className="px-4 py-2 bg-blue-500 text-white rounded">
+              Save
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
